@@ -1,3 +1,4 @@
+import time
 import random
 import itertools
 import traceback
@@ -7,6 +8,13 @@ import discord.opus
 from discord.ext import commands
 
 client = commands.Bot('=', description='Communicate with Morse code')
+
+def now():
+    return time.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+@client.before_invoke
+async def before_invoke(ctx):
+    print(now(), ctx.author, 'ran', ctx.prefix + str(ctx.command))
 
 @client.event
 async def on_command_error(ctx, exc):
@@ -123,25 +131,35 @@ def mute(sources, yes):
 
 async def play_morse(msg, sources, wpm, freq):
     ditlength = 6/(5 * max(15, wpm))
+    msg = '/'.join(
+        ' '.join(
+            '_'.join(
+                i for i in j.strip()
+                if i in '.-'
+            )
+            for j in k.strip().split()
+        )
+        for k in msg.split('/')
+    )
     for r in sources:
         r.freq = freq
-    for j in msg.split('/'):
-        j = j.strip()
-        pieces = j.split()
-        for idx, k in enumerate(pieces):
-            for i in k:
-                if i == '.':
-                    mute(sources, False)
-                    await asyncio.sleep(ditlength)
-                if i == '-':
-                    mute(sources, False)
-                    await asyncio.sleep(ditlength * 3)
-                mute(sources, True)
-                await asyncio.sleep(ditlength)
+    for i in msg:
+        if i == '.':
+            mute(sources, False)
+            await asyncio.sleep(ditlength)
+        if i == '-':
+            mute(sources, False)
+            await asyncio.sleep(ditlength * 3)
+        if i == '_':
             mute(sources, True)
-            await asyncio.sleep(2 * 6 / (5 * wpm))
-        mute(sources, True)
-        await asyncio.sleep(6 * 6 / (5 * wpm))
+            await asyncio.sleep(ditlength)
+        if i == ' ':
+            mute(sources, True)
+            await asyncio.sleep(18 / (5 * wpm))
+        if i == '/':
+            mute(sources, True)
+            await asyncio.sleep(42 / (5 * wpm))
+    mute(sources, True)
     for r in sources:
         r.freq = r._freq
 
@@ -153,9 +171,13 @@ class Room:
         self.net = net
         self.password = password
         self.wavs = {}
+        self.futs = {}
+        self.wpms = {}
         self.speaking = None
         self.new_users = set()
         self.host = None
+        self.messages = asyncio.Queue()
+        self.task = asyncio.create_task(self.handle_msgs())
 
     @staticmethod
     def call(ctx):
@@ -170,9 +192,62 @@ class Room:
             + chr(65 + int(user[-6:-4]) % 26)
         )
 
-    async def connect(self, ctx, wav):
+    async def handle_msgs(self):
+        """Background task that handles all messages."""
+        try:
+            while 1:
+                ctx, msg = await self.messages.get()
+                if self.net and await self.process_commands(msg, ctx):
+                    continue
+                if msg.content.startswith('users'):
+                    if msg.author.id != ctx.author.id:
+                        continue
+                    print(now(), ctx.author, 'ran', msg.content)
+                    await ctx.send('\n'.join(
+                        self.call(i)
+                        for i in self.wavs
+                    ))
+                    continue
+                if msg.content == 'done':
+                    if msg.author.id != ctx.author.id:
+                        continue
+                    print(now(), ctx.author, 'ran', msg.content)
+                    await self.set_speaker(ctx)
+                    continue
+                if msg.content.startswith('wpm'):
+                    if msg.author.id != ctx.author.id:
+                        continue
+                    print(now(), ctx.author, 'ran', msg.content)
+                    try:
+                        self.wpms[ctx] = int(msg.content.split()[-1])
+                    except ValueError:
+                        continue
+                    await ctx.send('WPM set to %s' % self.wpms[ctx])
+                    continue
+                if msg.content == 'bye':
+                    if msg.author.id != ctx.author.id:
+                        continue
+                    print(now(), ctx.author, 'ran', msg.content)
+                    self.futs[ctx].set_result(None)
+                if not msg.content.startswith(('.', '-')):
+                    continue
+                if self.net and not msg.author.id == ctx.author.id:
+                    continue
+                await self.speak(msg.content, self.wavs[ctx], self.wpms[ctx])
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            return
+        except:
+            traceback.print_exc()
+
+    async def connect(self, ctx, wav, fut, wpm):
         """Connects the wave to the room. Returns whether you are the host."""
         self.wavs[ctx] = wav
+        self.futs[ctx] = fut
+        self.wpms[ctx] = wpm
+        morsing = asyncio.create_task(play_morse(
+            morse_msg(self.name), [wav], 30, 440
+        ))
         if self.net:
             await ctx.send(f"""Joined your voice channel.
 You are connected to **net** `{self.name}`.
@@ -182,11 +257,11 @@ to play it to all connected users.""")
             if len(self.wavs) == 1:
                 await self.set_host(ctx)
                 await self.set_speaking(ctx)
+                await morsing
                 return True
             self.new_users.add(ctx)
-            await ctx.send(f'The net host is {self.host.author.name}#\
-{self.host.author.discriminator} ({self.call(self.host)}). Feel free to DM \
-them with any concerns.')
+            await ctx.send(f'The net host is {self.host.author!s} \
+({self.call(self.host)}). Feel free to DM them with any concerns.')
             await self.host.send(f'{self.call(ctx)} just joined the net! Run \
 `welcome` to process automatic welcomes.')
         else:
@@ -194,11 +269,20 @@ them with any concerns.')
 You are connected to room `{self.name}`.
 Send `-- --- .-. ... . / -.-. --- -.. .`
 to play it to all connected users in the room.""")
+            await asyncio.gather(*(
+                i.send(f'{self.call(ctx)} just joined the room!')
+                for i in self.wavs
+                if i != ctx
+            ))
+        await morsing
         return False
 
     async def disconnect(self, ctx):
         """Disconnects the wave from the room. Returns whether to destroy."""
         del self.wavs[ctx]
+        del self.futs[ctx]
+        del self.wpms[ctx]
+        self.new_users.discard(ctx)
         if self.net:
             if self.host == ctx and len(self.wavs) > 0:
                 nctx, nwav = self.wavs.popitem()
@@ -206,7 +290,10 @@ to play it to all connected users in the room.""")
                 await self.set_host(nctx)
             if self.speaking == ctx and len(self.wavs) > 0:
                 await self.set_speaking(self.host)
-        return len(self.wavs) <= 0
+        if len(self.wavs) <= 0:
+            self.task.cancel()
+            return True
+        return False
 
     async def welcome(self):
         """Starts welcoming new users."""
@@ -258,8 +345,7 @@ longer speak.')
             await self.host.send('You are no longer the host.')
         self.host = ctx
         await self.host.send('You are now the host of this net!')
-        await asyncio.gather(*(i.send(f'{self.host.name}#\
-{self.host.discriminator} ({self.call(self.host)}) \
+        await asyncio.gather(*(i.send(f'{self.host!s} ({self.call(self.host)}) \
 is now the host of this net.') for i in self.wavs
 if i != self.host and i != old_host))
 
@@ -271,6 +357,7 @@ if i != self.host and i != old_host))
             return False
         content = msg.content
         if content.startswith('net wpm'):
+            print(now(), ctx.author, 'ran', msg.content)
             try:
                 self.wpm = int(content.split(' ')[-1])
             except ValueError:
@@ -278,6 +365,7 @@ if i != self.host and i != old_host))
             await ctx.send('Net WPM set to ' + str(self.wpm))
             return True
         if content.startswith('host'):
+            print(now(), ctx.author, 'ran', msg.content)
             call = content.split()[-1]
             for c in self.wavs:
                 if self.call(c) == call:
@@ -286,6 +374,7 @@ if i != self.host and i != old_host))
             await ctx.send('No user with that callsign')
             return True
         if content.startswith('speaker'):
+            print(now(), ctx.author, 'ran', msg.content)
             call = content.split()[-1]
             for c in self.wavs:
                 if self.call(c) == call:
@@ -296,6 +385,7 @@ if i != self.host and i != old_host))
             await ctx.send('No user with that callsign')
             return True
         if content.startswith('welcome'):
+            print(now(), ctx.author, 'ran', msg.content)
             await ctx.send('Welcoming new users')
             old_wpm = self.wpm
             if content != 'welcome':
@@ -305,12 +395,6 @@ if i != self.host and i != old_host))
                     return True
             await self.welcome()
             self.wpm = old_wpm
-            return True
-        if content.startswith('users'):
-            await ctx.send('\n'.join(
-                self.call(i)
-                for i in self.wavs
-            ))
             return True
         return False
 
@@ -422,47 +506,17 @@ class Morse(commands.Cog):
                 await ctx.send("You didn't get the password right in three \
 tries! Please try again later.")
                 return
-        morse_hi = morse_msg(_room)
         await asyncio.sleep(1.5) # wait a bit because it takes a bit to start
-        morsing = asyncio.create_task(play_morse(morse_hi, [wav], 30, 440))
-        await room.connect(ctx, wav)
-        await morsing
-        messages = asyncio.Queue()
+        fut = client.loop.create_future()
         @client.listen()
         async def on_message(m):
             if m.channel.id != ctx.channel.id:
                 return
             if m.content.startswith('='):
                 return
-            messages.put_nowait(m)
-        while 1:
-            if not vc.is_connected():
-                break
-            msg = await messages.get()
-            if room.net and await room.process_commands(msg, ctx):
-                continue
-            if msg.content == 'done':
-                await room.set_speaker(ctx)
-                continue
-            if msg.content.startswith('wpm'):
-                if msg.author.id != ctx.author.id:
-                    continue
-                try:
-                    wpm = int(msg.content.split()[-1])
-                except ValueError:
-                    continue
-                await ctx.send('WPM set to %s' % wpm)
-                continue
-            if msg.content == 'bye':
-                if msg.author.id != ctx.author.id:
-                    continue
-                break
-            if not msg.content.startswith(('.', '-')):
-                continue
-            if room.net and not msg.author.id == ctx.author.id:
-                continue
-            await room.speak(msg.content, wav, wpm)
-            await asyncio.sleep(1)
+            room.messages.put_nowait((ctx, m))
+        await room.connect(ctx, wav, fut, wpm)
+        await fut
         client.remove_listener('message', on_message)
         vc.stop()
         await vc.disconnect()
@@ -488,8 +542,7 @@ tries! Please try again later.")
         embed.add_field(name='Net', value='Yes' if room.net else 'No')
         embed.add_field(name='Password protected',
                         value='Yes' if room.password else 'No')
-        embed.add_field(name='Current host', value='{0.name}#\
-{0.discriminator}'.format(room.host.author))
+        embed.add_field(name='Current host', value=str(room.host.author))
         if room.net:
             embed.set_footer(text='If you become the host of a net, your \
 username and discriminator will be revealed to all users of the net at that \

@@ -14,7 +14,7 @@ def now():
 
 @client.before_invoke
 async def before_invoke(ctx):
-    print(now(), ctx.author, 'ran', ctx.prefix + str(ctx.command))
+    print(now(), ctx.author, 'ran', ctx.message.content)
 
 @client.event
 async def on_command_error(ctx, exc):
@@ -538,12 +538,11 @@ tries! Please try again later.")
             await ctx.send('No room named `%s`' % room)
             return
         embed = discord.Embed(title='Information on `%s`' % room.name)
-        embed.add_field(name='WPM', value=room.wpm)
         embed.add_field(name='Net', value='Yes' if room.net else 'No')
-        embed.add_field(name='Password protected',
-                        value='Yes' if room.password else 'No')
-        embed.add_field(name='Current host', value=str(room.host.author))
         if room.net:
+            embed.add_field(name='Password protected',
+                            value='Yes' if room.password else 'No')
+            embed.add_field(name='Current host', value=str(room.host.author))
             embed.set_footer(text='If you become the host of a net, your \
 username and discriminator will be revealed to all users of the net at that \
 moment. You could involuntarily become the host of the net if the host leaves, \

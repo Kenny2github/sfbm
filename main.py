@@ -1,3 +1,4 @@
+import os
 import time
 import random
 import traceback
@@ -5,7 +6,7 @@ import asyncio
 import discord
 import discord.gateway
 import discord.opus
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 #monkeypatch voice speaking op
 async def received_message(self, msg):
@@ -602,16 +603,33 @@ client.add_cog(Morse())
 with open('morse.txt') as f:
     token = f.read().strip()
 
+@tasks.loop(minutes=5.0)
+async def set_playing_status():
+    await client.change_presence(activity=discord.Activity(
+        type=discord.ActivityType.listening, name='=help'
+    ))
+
+@set_playing_status.before_loop
+async def before_playing():
+    await client.wait_until_ready()
+
 async def wakeup():
+    await client.wait_until_ready()
+    mtime = os.path.getmtime(__file__)
     try:
         while 1:
+            if os.path.getmtime(__file__) > mtime:
+                return
             await asyncio.sleep(1)
     except:
         return
 try:
     task = client.loop.create_task(client.start(token))
+    set_playing_status.start()
     client.loop.run_until_complete(wakeup())
 except KeyboardInterrupt:
-    client.loop.run_until_complete(client.logout())
+    pass
 finally:
+    set_playing_status.cancel()
+    client.loop.run_until_complete(client.logout())
     client.loop.close()

@@ -17,8 +17,8 @@ async def received_message(self, msg):
         await self.initial_connection(data)
     elif op == self.HEARTBEAT_ACK:
         self._keep_alive.ack()
-    elif op == self.INVALIDATE_SESSION:
-        await self.identify()
+    elif op == self.RESUMED:
+        pass
     elif op == self.SESSION_DESCRIPTION:
         self._connection.mode = data['mode']
         await self.load_secret_key(data)

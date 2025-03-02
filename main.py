@@ -9,24 +9,13 @@ import discord.opus
 from discord.ext import commands, tasks
 
 #monkeypatch voice speaking op
-async def received_message(self, msg):
+async def _msg_hook(self: discord.gateway.DiscordVoiceWebSocket, *args: dict[str, Any]) -> None:
+    msg = args[1]
     op = msg['op']
-    data = msg.get('d')
+    data = msg['d']  # According to Discord this key is always given
 
-    if op == self.READY:
-        await self.initial_connection(data)
-    elif op == self.HEARTBEAT_ACK:
-        self._keep_alive.ack()
-    elif op == self.INVALIDATE_SESSION:
-        await self.identify()
-    elif op == self.SESSION_DESCRIPTION:
-        self._connection.mode = data['mode']
-        await self.load_secret_key(data)
-    elif op == self.HELLO:
-        interval = data['heartbeat_interval'] / 1000.0
-        self._keep_alive = discord.gateway.VoiceKeepAliveHandler(ws=self, interval=interval)
-        self._keep_alive.start()
-    elif op == self.SPEAKING:
+    if op == self.SPEAKING:
+        print(msg)
         user_id = int(data['user_id'])
         vc = self._connection
 
@@ -37,9 +26,26 @@ async def received_message(self, msg):
 
         client.dispatch('speaking_update', user, data['speaking'])
 
-discord.gateway.DiscordVoiceWebSocket.received_message = received_message
+discord.gateway.DiscordVoiceWebSocket._hook = _msg_hook
 
-client = commands.Bot('=', description='Communicate with Morse code')
+class SFBM(commands.Bot):
+
+    async def setup_hook(self) -> None:
+        await self.add_cog(Morse())
+        set_playing_status.start()
+        asyncio.create_task(self.wakeup())
+
+    async def wakeup(self):
+        await client.wait_until_ready()
+        mtime = os.path.getmtime(__file__)
+        while 1:
+            if os.path.getmtime(__file__) > mtime:
+                await client.close()
+            await asyncio.sleep(1)
+
+intents = discord.Intents.default()
+intents.message_content = True
+client = SFBM('=', description='Communicate with Morse code', intents=intents)
 
 def now():
     return time.strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -565,7 +571,7 @@ tries! Please try again later.")
             room.messages.put_nowait((ctx, m))
         await room.connect(ctx, wav, fut)
         await fut
-        client.remove_listener('message', on_message)
+        client.remove_listener(on_message)
         vc.stop()
         await vc.disconnect()
         if await room.disconnect(ctx):
@@ -598,8 +604,6 @@ moment. You could involuntarily become the host of the net if the host leaves, \
 so if you want no chance of your information being leaked, do not join nets.')
         await ctx.send(embed=embed)
 
-client.add_cog(Morse())
-
 with open('morse.txt') as f:
     token = f.read().strip()
 
@@ -613,23 +617,7 @@ async def set_playing_status():
 async def before_playing():
     await client.wait_until_ready()
 
-async def wakeup():
-    await client.wait_until_ready()
-    mtime = os.path.getmtime(__file__)
-    try:
-        while 1:
-            if os.path.getmtime(__file__) > mtime:
-                return
-            await asyncio.sleep(1)
-    except:
-        return
 try:
-    task = client.loop.create_task(client.start(token))
-    set_playing_status.start()
-    client.loop.run_until_complete(wakeup())
+    client.run(token)
 except KeyboardInterrupt:
     pass
-finally:
-    set_playing_status.cancel()
-    client.loop.run_until_complete(client.logout())
-    client.loop.close()

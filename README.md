@@ -3,7 +3,7 @@
 Talk to people in other servers via Morse code.
 
 ## Link to Add
-https://discordapp.com/api/oauth2/authorize?client_id=619145918733746176&permissions=36784192&scope=bot
+https://discord.com/api/oauth2/authorize?client_id=619145918733746176&permissions=36784192&scope=bot+applications.commands
 
 ## Prefix
 `=`

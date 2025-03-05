@@ -2,3 +2,5 @@ config.json
 .venv/
 __pycache__/
 *.py[oc]
+logs/
+*.log

@@ -24,6 +24,7 @@ with open(SRCDIR / 'config.json') as f:
 if len(sys.argv) <= 1 or sys.argv[1].startswith('-'):
     log_handler = logging.StreamHandler(sys.stdout)
 else:
+    Path(sys.argv[1]).parent.mkdir(exist_ok=True)
     log_handler = logging.FileHandler(sys.argv[1], 'a')
 logging.basicConfig(format='{asctime} {levelname}\t {name:19} {message}',
                     style='{', handlers=[log_handler], level=logging.INFO)

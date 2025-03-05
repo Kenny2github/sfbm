@@ -139,3 +139,10 @@ class Wave(discord.AudioSource):
 
     def queue_text(self, msg: str, wpm: int, freq: float) -> str:
         return self.queue_morse(morse_msg(msg), wpm, freq)
+
+if __name__ == '__main__':
+    with open(sys.argv[1], 'wb') as f:
+        wav = Wave(waveform=sine if sys.argv[2] == 'sine' else sawtooth)
+        wav.queue_text(sys.argv[3], 15, 665)
+        while not wav.frames[665].empty():
+            f.write(wav.read())

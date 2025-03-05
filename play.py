@@ -81,7 +81,7 @@ def get_or(queue: SimpleQueue[T], default: D = None) -> T | D:
 class Wave(discord.AudioSource):
 
     sample_rate: int = FREQ
-    waveform: Callable[[float, float], float] = field(default=sawtooth)
+    waveform: Callable[[float, float], float] = field(default=sine)
     frames: dict[float, SimpleQueue[bool]] = field(default_factory=dict)
 
     phase: int = 0

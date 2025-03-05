@@ -2,7 +2,7 @@ import sys
 from dataclasses import dataclass, field
 import math
 from queue import Empty, SimpleQueue
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 import discord
 
@@ -63,12 +63,6 @@ MORSE = {
 def morse_msg(msg: str) -> str:
     return ' '.join(MORSE.get(i, '..--..') for i in msg.lower())
 
-def sawtooth(freq: float, phase: float) -> float:
-    return (phase % freq) / freq * 2 - 1
-
-def sine(freq: float, phase: float) -> float:
-    return math.sin(2 * math.pi * phase / freq)
-
 T = TypeVar('T')
 D = TypeVar('D')
 def get_or(queue: SimpleQueue[T], default: D = None) -> T | D:
@@ -81,10 +75,12 @@ def get_or(queue: SimpleQueue[T], default: D = None) -> T | D:
 class Wave(discord.AudioSource):
 
     sample_rate: int = FREQ
-    waveform: Callable[[float, float], float] = field(default=sine)
     frames: dict[float, SimpleQueue[bool]] = field(default_factory=dict)
 
     phase: int = 0
+
+    def waveform(self, freq: float, phase: float) -> float:
+        return math.sin(2 * math.pi * (phase + self.phase) / (self.sample_rate / freq))
 
     def read(self):
         # one frame of audio
@@ -95,7 +91,7 @@ class Wave(discord.AudioSource):
         return b''.join(
             int(
                 # generate frame of wave based on frequency and phase
-                sum(self.waveform(self.sample_rate / f, i + self.phase) for f in freqs)
+                sum(self.waveform(f, i) for f in freqs)
                 # attenuate based on number of waves present
                 / (len(freqs) or 1)
                 # convert float wave frame to 16-bit int
@@ -142,7 +138,7 @@ class Wave(discord.AudioSource):
 
 if __name__ == '__main__':
     with open(sys.argv[1], 'wb') as f:
-        wav = Wave(waveform=sine if sys.argv[2] == 'sine' else sawtooth)
+        wav = Wave()
         wav.queue_text(sys.argv[3], 15, 665)
         while not wav.frames[665].empty():
             f.write(wav.read())

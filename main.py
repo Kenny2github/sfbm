@@ -5,14 +5,13 @@ import os
 from pathlib import Path
 import sys
 import asyncio
-from typing import Literal
 import discord
 import discord.gateway
 import discord.opus
 from discord import app_commands
 from discord.ext import commands
 
-from play import Wave, morse_msg, sine, sawtooth
+from play import Wave, morse_msg
 from room import Room
 from view import RoomView
 
@@ -126,7 +125,7 @@ client = SFBM()
 rooms: dict[str, Room] = {}
 
 @client.tree.command(description='Join a Morse room')
-async def join(ctx: discord.Interaction, name: str, net: bool = False, waveform: Literal['sine', 'sawtooth'] = 'sine') -> None:
+async def join(ctx: discord.Interaction, name: str, net: bool = False) -> None:
     assert isinstance(ctx.channel, discord.TextChannel)
     assert isinstance(ctx.user, discord.Member)
     assert ctx.guild is not None
@@ -142,7 +141,7 @@ async def join(ctx: discord.Interaction, name: str, net: bool = False, waveform:
     except discord.Forbidden:
         await send_error(ctx.response.send_message, "Couldn't join your voice channel.")
         return
-    wave = Wave(waveform=sine if waveform == 'sine' else sawtooth)
+    wave = Wave()
     try:
         vc.play(wave, application='audio', signal_type='music')
     except discord.Forbidden:

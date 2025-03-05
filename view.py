@@ -43,7 +43,7 @@ class MorseModal(SingleValueModal):
         for view in self.room.views:
             _, user = view.user
             msg = view.audio.queue_morse(self.body.value, view.wpm,
-                                         (user.id % 100) + 300)
+                                         (user.id % 660) + 220)
         await ctx.response.edit_message()
 
 class TextModal(SingleValueModal):
@@ -60,7 +60,7 @@ class TextModal(SingleValueModal):
         for view in self.room.views:
             _, user = view.user
             msg = view.audio.queue_text(self.body.value, view.wpm,
-                                        (user.id % 100) + 300)
+                                        (user.id % 660) + 220)
         await ctx.response.edit_message()
 
 class WPMModal(SingleValueModal):

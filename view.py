@@ -113,6 +113,7 @@ class RoomView(discord.ui.View):
     async def interaction_check(self, ctx: discord.Interaction[SFBM]) -> bool:
         if self.room.net and ctx.user != self.user[1]:
             await ctx.client.tree.on_error(ctx, app_commands.CheckFailure('You are not the bot control in this server!'))
+            return False
         return True
 
     def __init__(self, *, msg: discord.Message | discord.PartialMessage, room: Room, audio: Wave, user: Call):

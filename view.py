@@ -183,6 +183,8 @@ class RoomView(discord.ui.View):
     async def leave(self, ctx: discord.Interaction,
                     button: discord.ui.Button) -> None:
         self.room.views.remove(self)
+        if self.user[0].voice_client:
+            await self.user[0].voice_client.disconnect(force=False)
         await ctx.response.edit_message(view=None)
         await ctx.followup.send('Goodbye', ephemeral=True)
         self.stop()

@@ -108,6 +108,9 @@ class RoomView(discord.ui.View):
     user: Call
     wpm: int = 15
 
+    async def interaction_check(self, ctx: discord.Interaction) -> bool:
+        return ctx.user == self.user[1] or not self.room.net
+
     def __init__(self, *, msg: discord.Message | discord.PartialMessage, room: Room, audio: Wave, user: Call):
         super().__init__(timeout=None)
         self.msg = msg

@@ -125,6 +125,10 @@ client = SFBM()
 rooms: dict[str, Room] = {}
 
 @client.tree.command(description='Join a Morse room')
+@app_commands.describe(
+    name='The name of the room to join.',
+    net='If this is a new room, you become the host; only one person you specify can speak at a time.',
+)
 async def join(ctx: discord.Interaction, name: str, net: bool = False) -> None:
     assert isinstance(ctx.channel, discord.TextChannel)
     assert isinstance(ctx.user, discord.Member)
@@ -170,6 +174,7 @@ async def join(ctx: discord.Interaction, name: str, net: bool = False) -> None:
     await ctx.edit_original_response(embed=view.make_embed(), view=view)
 
 @client.tree.command(description='Convert text to Morse')
+@app_commands.describe(text='Text to translate to Morse')
 async def morse(ctx: discord.Interaction, text: str) -> None:
     await ctx.response.send_message(f'```\n{morse_msg(text)}\n```', ephemeral=True)
 

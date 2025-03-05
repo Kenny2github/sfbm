@@ -64,10 +64,10 @@ def morse_msg(msg: str) -> str:
     return ' '.join(MORSE.get(i, '..--..') for i in msg.lower())
 
 def sawtooth(freq: float, phase: float) -> float:
-    return (phase % freq) / freq
+    return (phase % freq) / freq * 2 - 1
 
 def sine(freq: float, phase: float) -> float:
-    return math.sin(2 * math.pi * freq + phase)
+    return math.sin(2 * math.pi * phase / freq)
 
 T = TypeVar('T')
 D = TypeVar('D')

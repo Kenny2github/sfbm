@@ -41,8 +41,8 @@ class MorseModal(SingleValueModal):
             await ctx.response.send_message('No one is here', ephemeral=True)
             return
         for view in self.room.views:
-            _, user = view.user
-            msg = view.audio.queue_morse(self.body.value, view.wpm,
+            _, user = self.view.user
+            msg = view.audio.queue_morse(self.body.value, self.view.wpm,
                                          (user.id % 660) + 220)
         await ctx.response.edit_message()
 
@@ -58,8 +58,8 @@ class TextModal(SingleValueModal):
             await ctx.response.send_message('No one is here', ephemeral=True)
             return
         for view in self.room.views:
-            _, user = view.user
-            msg = view.audio.queue_text(self.body.value, view.wpm,
+            _, user = self.view.user
+            msg = view.audio.queue_text(self.body.value, self.view.wpm,
                                         (user.id % 660) + 220)
         await ctx.response.edit_message()
 

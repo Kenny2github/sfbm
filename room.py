@@ -6,8 +6,7 @@ import discord
 
 if TYPE_CHECKING:
     from view import RoomView
-
-Call = tuple[discord.Guild, discord.User | discord.Member]
+    Call = tuple[discord.Guild, discord.User | discord.Member]
 
 @overload
 def callsign(guild_id: int, user_id: int, /) -> str: ...

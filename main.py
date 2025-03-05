@@ -60,6 +60,7 @@ class MorseTree(app_commands.CommandTree):
             app_commands.BotMissingPermissions,
             app_commands.MissingPermissions,
             app_commands.CommandOnCooldown,
+            app_commands.CheckFailure,
         )):
             if ctx.response.is_done():
                 method = ctx.followup.send
@@ -69,7 +70,6 @@ class MorseTree(app_commands.CommandTree):
             await send_error(method, str(exc))
             return
         if isinstance(exc, (
-            app_commands.CheckFailure,
             app_commands.CommandNotFound,
         )):
             return
@@ -124,41 +124,29 @@ client = SFBM()
 
 rooms: dict[str, Room] = {}
 
-@client.tree.command(description='Join a Morse room')
-@app_commands.describe(
-    name='The name of the room to join.',
-    net='If this is a new room, you become the host; only one person you specify can speak at a time.',
-)
-async def join(ctx: discord.Interaction, name: str, net: bool = False) -> None:
+async def _join(ctx: discord.Interaction, name: str, net: bool) -> tuple[Room, RoomView]:
     assert isinstance(ctx.channel, discord.TextChannel)
     assert isinstance(ctx.user, discord.Member)
     assert ctx.guild is not None
+    # get a handle on the message for later editing
+    msg = await ctx.response.defer(thinking=True)
+    assert msg and msg.message_id is not None
+    msg = ctx.channel.get_partial_message(msg.message_id)
     # join user's voice channel
     if ctx.user.voice is None or ctx.user.voice.channel is None:
-        await send_error(ctx.response.send_message, "You're not in a voice channel!")
-        return
+        raise app_commands.CheckFailure("You're not in a voice channel!")
     if ctx.guild.voice_client is not None:
-        await send_error(ctx.response.send_message, 'Already in a voice channel!')
-        return
+        raise app_commands.CheckFailure('Already in a voice channel!')
     try:
         vc = await ctx.user.voice.channel.connect()
     except discord.Forbidden:
-        await send_error(ctx.response.send_message, "Couldn't join your voice channel.")
-        return
+        raise app_commands.BotMissingPermissions(['connect'])
     wave = Wave()
     try:
         vc.play(wave, application='audio', signal_type='music')
     except discord.Forbidden:
-        await send_error(ctx.response.send_message, "Can't speak in your voice channel.")
         await vc.disconnect()
-        return
-    # get a handle on the message for later editing
-    msg = await ctx.response.defer()
-    assert msg and msg.message_id is not None
-    msg = ctx.channel.get_partial_message(msg.message_id)
-    # clean up empty rooms so that they can be reinitialized
-    for key in [key for key, value in rooms.items() if not value.views]:
-        del rooms[key]
+        raise app_commands.BotMissingPermissions(['speak'])
     # get or create room
     if name not in rooms:
         room = Room(name, net=net)
@@ -172,6 +160,66 @@ async def join(ctx: discord.Interaction, name: str, net: bool = False) -> None:
     room.views.add(view)
     # display view
     await ctx.edit_original_response(embed=view.make_embed(), view=view)
+    return (room, view)
+
+class AccessKeyModal(discord.ui.Modal):
+
+    access_key: discord.ui.TextInput
+    confirm: discord.ui.TextInput
+    name: str
+    net: bool
+
+    def __init__(self, name: str, net: bool) -> None:
+        if name in rooms:
+            title = 'Room Access Key'
+        else:
+            title = 'Set Access Key'
+        super().__init__(title=title, timeout=5 * 60)
+        self.access_key = discord.ui.TextInput(
+            label='Room Access Key',
+            style=discord.TextStyle.short,
+            placeholder='*' * 6,
+        )
+        self.confirm = discord.ui.TextInput(
+            label='Confirm Access Key',
+            style=discord.TextStyle.short,
+            placeholder='*' * 6,
+        )
+        self.add_item(self.access_key)
+        if name not in rooms:
+            self.add_item(self.confirm)
+        self.name = name
+        self.net = net
+
+    async def on_submit(self, ctx: discord.Interaction) -> None:
+        if self.name in rooms:
+            if rooms[self.name].access_key != self.access_key.value:
+                raise app_commands.CheckFailure(f'Incorrect access key `{self.access_key.value}`')
+            await _join(ctx, self.name, self.net)
+        else:
+            if self.access_key.value != self.confirm.value:
+                raise app_commands.CheckFailure(f"Access keys don't match")
+            room, view = await _join(ctx, self.name, self.net)
+            room.access_key = self.access_key.value
+
+    async def on_error(self, ctx: discord.Interaction[SFBM], error: app_commands.AppCommandError) -> None:
+        return await client.tree.on_error(ctx, error)
+
+@client.tree.command(description='Join a Morse room')
+@app_commands.describe(
+    name='The name of the room to join.',
+    net='If this is a new room, you become the host; only one person you specify can speak at a time.',
+    access_key='If this is a new room, set an access key required to join it.'
+)
+@app_commands.rename(access_key='access-key')
+async def join(ctx: discord.Interaction, name: str, net: bool = False, access_key: bool = False) -> None:
+    # clean up empty rooms so that they can be reinitialized
+    for key in [key for key, value in rooms.items() if not value.views]:
+        del rooms[key]
+    if access_key or (name in rooms and rooms[name].access_key is not None):
+        await ctx.response.send_modal(AccessKeyModal(name, net))
+    else:
+        await _join(ctx, name, net)
 
 @client.tree.command(description='Convert text to Morse')
 @app_commands.describe(text='Text to translate to Morse')

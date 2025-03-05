@@ -36,10 +36,10 @@ def callsign(guild_id_or_call: int | Call, user_id: int | None = None, /) -> str
 class Room:
     name: str
     net: bool = False
-    password: str | None = None
-    _host: Call | None = None
-    _speaking: Call | None = None
-    views: set[RoomView] = field(default_factory=set)
+    access_key: str | None = None
+    _host: Call | None = field(init=False, default=None)
+    _speaking: Call | None = field(init=False, default=None)
+    views: set[RoomView] = field(init=False, default_factory=set)
 
     @property
     def host(self) -> Call | None:

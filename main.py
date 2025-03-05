@@ -114,7 +114,7 @@ class SFBM(commands.Bot):
 
     async def wakeup(self):
         await client.wait_until_ready()
-        mtimes = {path: os.path.getmtime(path) for path in Path(__file__).parent.glob('**.py')}
+        mtimes = {path: os.path.getmtime(path) for path in SRCDIR.glob('*.py')}
         while 1:
             for path, mtime in mtimes.items():
                 if os.path.getmtime(path) > mtime:

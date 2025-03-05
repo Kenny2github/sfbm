@@ -186,7 +186,6 @@ class RoomView(discord.ui.View):
         if self.user[0].voice_client:
             await self.user[0].voice_client.disconnect(force=False)
         await ctx.response.edit_message(view=None)
-        await ctx.followup.send('Goodbye', ephemeral=True)
         self.stop()
         if not self.room.views:
             return

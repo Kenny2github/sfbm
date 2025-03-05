@@ -103,8 +103,8 @@ class Wave(discord.AudioSource):
         )
 
     def queue_morse(self, msg: str, wpm: int, freq: float) -> str:
-        ditlength = 6000 // (5 * max(15, wpm)) // FRAME # in frames
-        pauselength = 6000 // (5 * wpm) // FRAME # in frames
+        ditlength = 10000 // (5 * max(12, wpm)) // FRAME # in frames
+        pauselength = 10000 // (5 * wpm) // FRAME # in frames
         msg = '/'.join(
             ' '.join(
                 '_'.join(

@@ -1,10 +1,12 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
 import discord
+from discord import app_commands
 
 if TYPE_CHECKING:
     from room import Room, Call
     from play import Wave
+    from main import SFBM
 
 from room import callsign
 
@@ -108,8 +110,10 @@ class RoomView(discord.ui.View):
     user: Call
     wpm: int = 15
 
-    async def interaction_check(self, ctx: discord.Interaction) -> bool:
-        return ctx.user == self.user[1] or not self.room.net
+    async def interaction_check(self, ctx: discord.Interaction[SFBM]) -> bool:
+        if self.room.net and ctx.user != self.user[1]:
+            await ctx.client.tree.on_error(ctx, app_commands.CheckFailure('You are not the bot control in this server!'))
+        return True
 
     def __init__(self, *, msg: discord.Message | discord.PartialMessage, room: Room, audio: Wave, user: Call):
         super().__init__(timeout=None)

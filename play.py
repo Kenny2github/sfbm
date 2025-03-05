@@ -1,5 +1,4 @@
-
-
+import sys
 from dataclasses import dataclass, field
 import math
 from queue import Empty, SimpleQueue
@@ -100,9 +99,9 @@ class Wave(discord.AudioSource):
                 # attenuate based on number of waves present
                 / (len(freqs) or 1)
                 # convert float wave frame to 16-bit int
-                * 32767 + 32768
+                * 32767
             # double for left and right stereo channels
-            ).to_bytes(2, 'big') * 2
+            ).to_bytes(2, sys.byteorder, signed=True) * 2
             for i in range(samples)
         )
 
